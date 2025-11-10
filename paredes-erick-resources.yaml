@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: erick-paredes
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paredes-erick-configmap
+  namespace: erick-paredes
+data:
+  test.log: |
+    Un texto de prueba configmap
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: paredes-erick-secret
+  namespace: erick-paredes
+type: Opaque
+stringData:
+  apellido_paterno: Paredes
+  apellido_materno: Rodriguez
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paredes-erick-deployment
+  namespace: erick-paredes
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: paredes-erick-app
+  template:
+    metadata:
+      labels:
+        app: paredes-erick-app
+    spec:
+      containers:
+        - name: flask-app
+          image: daniel331012/scale-flask-modificado:latest
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: log-volume
+              mountPath: /app/logs
+          env:
+            - name: APELLIDO_PATERNO
+              valueFrom:
+                secretKeyRef:
+                  name: paredes-erick-secret
+                  key: apellido_paterno
+            - name: APELLIDO_MATERNO
+              valueFrom:
+                secretKeyRef:
+                  name: paredes-erick-secret
+                  key: apellido_materno
+      volumes:
+        - name: log-volume
+          configMap:
+            name: paredes-erick-configmap
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: paredes-erick-service
+  namespace: erick-paredes
+spec:
+  selector:
+    app: paredes-erick-app
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: paredes-erick-cronjob
+  namespace: erick-paredes
+spec:
+  schedule: "*/4 * * * *" # Cada 4 minutos
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: curl-job
+              image: curlimages/curl:latest
+              args:
+                - /bin/sh
+                - -c
+                - curl http://paredes-erick-service.erick-paredes.svc.cluster.local
+          restartPolicy: OnFailure
